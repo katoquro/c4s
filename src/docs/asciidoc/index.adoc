@@ -1,0 +1,800 @@
+= c4s (beta) - common communication convention between client and server
+:toc: left
+:toc-title: Table of Adventures
+:source-highlighter: coderay
+:toclevels: 3
+:imagesdir: /img
+
+== Motivation
+
+We believe that hybrid solutions are more robust than ultimate ones.
+
+Trying to have a balance between simplicity and power we found out this convention.
+The major idea is to provide API making patterns with respect to the Server side and comfortable for the Client side.
+
+NOTE: Make sure you checked the link:#best-practices[Best Practices] before usage.
+      There are many answers to questions that you may have.
+
+== Documentation convention
+
+_Italic_ - local definitions or from glossary +
+*BOLD* - technologies or definitions with external documentation +
+`/entity/{id}` - `id` is variable part of URI path +
+
+.Examples and explanations
+====
+link:https://www.json.org[JSON] is used as serialization format for examples bellow
+
+[source,json]
+----
+{
+  "field": "value"
+}
+----
+====
+
+== Glossary
+
+[[def-Identity]]
+Identity:: unique identifier
+
+[[def-Structure]]
+Structure:: object without identity
+
+[[def-Entity]]
+Entity:: object with identity field (e.g. ``id``)
+
+[[def-Model]]
+Model:: contract which describes which fields are in _Structure_ or _Model_
+
+[[def-View]]
+View:: read-only _Model_ which is used to represent _Entity_ from other point of view
+
+[[def-Filters]]
+Filters:: a set of conditions to reduce response. +
+          Filters are passed via GET request parameters: `<field>-<filter-keyword>=<value>`. +
+          _filter-keywords_ use keyword to express conditions: eq (`=`), gt (`>`), lg (`<`), gte(`>=`), lte (`<=`). +
+          _value_ must have the same tape with filtered field
+
+// TODO: filters with 'in' or more complicated forms
+
+.Filtering comments by dates
+====
+GET request ``example.org/api/comments?createdAt-gte=2000-01-01&createdAt-lt=2000-01-10``
+====
+
+There can be two additional steps: order and limit.
+It's assumed that limit is the last step.
+
+Sort is GET request parameters: `order=<field1-asc>[,<field2-desc>]`;
+Limit is GET request parameter: `limit=<count-of-results>`
+
+.Filtering with order and limit
+====
+GET request ``example.org/api/comments?createdAt-gte=2000-01-01&limit=1&order=createdAt-desc,id-asc``
+====
+
+[[def-Filtrator]]
+Filtrator:: a special _Model_ to filter and navigate across arrays.
+            Returned as a response when more than one entity was queried.
+
+.Response with Filtrator in a body
+====
+[source,json]
+----
+{
+  "items": [{…},{…},…], <1>
+  "hasMore": true,
+  "filter" : {          <2>
+    "limit" : 20
+  }
+}
+----
+<1> found entities according to filter
+<2> filter used in request
+====
+
+[[def-Counter]]
+Counter:: any field which represent an amount of items
+
+[[def-Operation]]
+Operation:: a system level <<def-Entity,Entity>> to check long term processes or complex object transformations.
+            Returned as a response for operation requests. See link:#operations-oriented-part[Operations oriented part]
+
+.Operation model
+====
+[source,json]
+----
+{
+  "id": "uuid-string",
+  "status": "status-string",  <1>
+  "parameters": {             <2>
+    "inputValue1": 42
+  },
+  "result": {                 <3>
+    "updatedValue1": "42"
+  }
+}
+----
+<1> any set of statuses agreed in your team
+<2> input operation parameters
+<3> the result of operation. May contain intermediate state.
+====
+
+== Data & Transfer conventions
+
+
+- URI path must use *'kebab-case'*
+- URI path entries are used in plural form, e.g. /comment**s**/{id}
+- Field naming convention must be either *'snake_case'* or *'camelCase'* (but only one across application)
+- <<def-Entity,Entity>> cannot contain another <<def-Entity,Entity>>, i.e. nesting isn't allowed
+- Arrays inside <<def-Entity,Entity>> can contain only _primitives_ (numbers, chars, strings) or structures
+- Date & time are always in link:https://en.wikipedia.org/wiki/Coordinated_Universal_Time[UTC]
+  and have link:https://en.wikipedia.org/wiki/ISO_8601[ISO 86013] format
+
+[#object-related-part]
+== Object related part
+
+This part describes CRUD calls on the entity.
+All calls manipulate the same model across one entity (except <<def-View,Views>>)
+
+=== Entity addressing
+
+Common rule to address entity is `<entity name in plural>/<optional entity identity>`
+
+====
+books/42 +
+comments/5da69dfa-055f-11e9-8eb2-f2801f1b9fd1
+====
+
+Entity address cannot contain more than one identity, in other words nested addresses are prohibited
+
+====
+right: /comments/{comment-id} +
+wrong: /posts/{post-id}/comments/{comment-id}
+====
+
+C4S is using subset of link:https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods[HTTP verbs] to manipulate an <<def-Entity,Entity>>
+
+==== Create
+
+POST request with body on entity path
+
+.Request/Response of creation
+====
+
+Request POST ``example.org/api/comments``
+[source,json]
+----
+{
+  "threadId": 42,
+  "content": "42"
+}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "id": 42,
+  "threadId": 42,
+  "content": "42"
+}
+----
+
+====
+
+==== Read by Identity
+
+GET request on entity path with <<def-Identity,Identity>>
+
+.Request/Response Entity by Identity
+====
+
+Request GET ``example.org/api/comments/42``
+
+Response:
+
+[source,json]
+----
+{
+  "id": 42,
+  "threadId": 42,
+  "content": "42"
+}
+----
+
+====
+
+==== Update
+
+PUT request with body on entity path.
+Given entity will override previous one.
+Not passed field means _unset_ (or set the _null_ value)
+
+.Request/Response of update
+====
+
+Suppose we have profile __Entity__ like this
+[source,json]
+----
+{
+  "userId": 42,
+  "birthDay": "1970-01-01",
+  "firstName": "Joni",
+  "middleName": "Jerry",
+  "lastName": "Doe"
+}
+----
+
+Request PUT ``example.org/api/comments``
+[source,json]
+----
+{
+  "userId": 42,
+  "birthDay": "1970-01-01",
+  "firstName": "John",
+  "lastName": "Doe"
+}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "userId": 42,
+  "birthDay": "1970-01-01",
+  "firstName": "John",
+  "lastName": "Doe"
+}
+----
+
+The first name was changed and middle name was unset (removed)
+====
+
+==== Delete
+
+DELETE request on entity path with <<def-Identity,Identity>>
+
+.Entity removing Request/Response
+====
+
+Request DELETE ``example.org/api/comments/42``
+
+Response:
+
+204 status-code [No Content] in case of success
+
+====
+
+==== Read list of Entities
+
+GET request on entity path returns <<def-Filtrator,Filtrator>>
+
+.Filtrator Request/Response
+====
+
+Request GET ``example.org/api/comments``
+
+Response:
+
+[source,json]
+----
+{
+  "items": [
+    {
+      "id": 42,
+      "threadId": 42,
+      "content": "new message"
+    }
+  ],
+  "hasMore": false,
+  "filter" : {
+    "limit" : 20
+  }
+}
+----
+
+====
+
+=== Setup relations between Entities
+
+The documentation bellow operates with definitions like _first_ (was created 'before'), _second_ (was created 'after'), _one_ and _many_ which describes corresponding parts of relations types.
+
+==== One-to-One
+
+POST request to the _second_ entity with <<def-Identity,Identity>> of the _first_ in a body.
+
+====
+
+POST request ``example.org/api/profiles``
+
+[source,json]
+----
+{
+  "userId": 42,
+  "birthDay": "1970-01-01"
+}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "id": 43,
+  "userId": 42,
+  "birthDay": "1970-01-01"
+}
+----
+
+====
+
+Additionally if bidirectional link is required (to filter the _first_ by identity of the _second_)
+this request must set the _second_ identity into the _first_ object
+
+==== One-to-Many
+
+POST request to the _many_ entity with <<def-Identity,Identity>> of the _one_ in a body.
+
+====
+
+POST request ``example.org/api/likes``
+
+[source,json]
+----
+{
+  "commentId": 42,
+  "type": "positive"
+}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "id": 43,
+  "commentId": 42,
+  "type": "positive"
+}
+----
+
+====
+
+Additionally if bidirectional links are required the _one_ entity can contain an array of <<def-Identity, Identities>> of __many__s
+
+You may see that contact for One-to-One and One-to-Many are the same.
+
+==== Many-to-Many
+
+This type of relation is difficult to manage and filter.
+Try to avoid this case in resource model by hiding behind "One-to-Many" if really need to
+
+== Views for Entities
+
+<<def-View,Views>> are useful for extending (with additional info) or reducing (to produce lightweight representation) Entities.
+View of Entity is called via `dot extension` in a path: `<entity-path>.<view>`
+
+.Views
+====
+/comments/42.lite +
+/comments.with-likes-count
+====
+
+View can be created for particular cases or be generic like `<entity>.count` which adds total amount to <<def-Filtrator,Filtrator>> response.
+<<def-Filters,Filters>> are also applicable to views like to entities.
+
+.Filters on Views
+====
+GET request ``example.org/api/comments.count?createdAt-lte=1970-01-01``
+
+Response:
+
+[source,json]
+----
+{
+  "items": [],
+  "hasMore": false,
+  "filter" : {
+    "createdAt-lte": "1970-01-01",
+    "limit": 20
+  },
+  "count": 0
+}
+----
+
+====
+
+[#operations-oriented-part]
+== Operations oriented part
+
+This path describes operations on the entities.
+
+<<def-Operation,Operations>> are designed for long term calls or transformations which cannot be done on entity like an object.
+All calls (except create) manipulate the Operation model.
+
+=== Operation addressing
+Because entity path may have long prefix due to server routing implementation, operation URI part in a path it's separated from object part by token `/-/` (means: not an <<def-Identity,Identity>>)
+
+.Operation path
+====
+/api/entity/-/operation +
+/api/microservice/v42/entity/-/operation
+====
+
+Operation URI path can contain only operation identity, and all parameters must be passed in a body.
+
+====
+Scheme of operation URI:
+
+/<any-server-prefix>/<entity>/-/<operation>/<operation-id>
+====
+
+==== Create
+
+POST request with body on operation path to create/start.
+This call returns object of operation instead of sent parameters
+
+.Start archiving operation
+====
+Request POST ``example.org/api/comments/-/archive``
+[source,json]
+----
+{
+  "threadId": 42
+}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "id": "5725fb91-755e-44ca-877b-d633a128a492",
+  "status": "PENDING",
+  "parameters": {
+    "threadId": 42
+  },
+  "result": { }
+}
+----
+====
+
+==== Read by Identity
+
+GET request on operation path with <<def-Identity,Identity>>
+
+.Read operation by identity
+====
+Request GET ``example.org/api/comments/-/archive/5725fb91-755e-44ca-877b-d633a128a492``
+
+Response:
+
+[source,json]
+----
+{
+  "id": "5725fb91-755e-44ca-877b-d633a128a492",
+  "status": "RUNNING",
+  "parameters": {
+    "threadId": 42
+  },
+  "result": { }
+}
+----
+====
+
+==== Abort operation
+
+DELETE request on operation path with <<def-Identity,Identity>>
+
+This request should return operation in current state.
+There are no guarantees about immediate aborting (or rollback) because it depends on the server implementation.
+This is a way just say to server that the result of its operations already doesn't matter for client.
+
+Note: You should consider having a deprecation policy for complete operations.
+
+.Sending of abort signal
+====
+Request DELETE ``example.org/api/comments/-/archive/5725fb91-755e-44ca-877b-d633a128a492``
+
+Response:
+
+[source,json]
+----
+{
+  "id": "5725fb91-755e-44ca-877b-d633a128a492",
+  "status": "ABORTION"
+  "parameters": {
+    "threadId": 42
+  },
+  "result": {
+    "archivedCommentIds" : [42]
+  }
+}
+----
+====
+
+==== Read list of operations
+
+GET request on operation path.
+Request may contain filters.
+
+.Getting an Filtrator of operations
+====
+
+Request GET ``example.org/api/comments/-/archive?status-eq=ABORTED``
+
+Response:
+
+[source,json]
+----
+{
+  "items": [
+    {
+      "id": "5725fb91-755e-44ca-877b-d633a128a492",
+      "status": "ABORTED",
+      "parameters": {
+        "threadId": 42
+      },
+      "result": {
+        "archivedCommentIds" : [42]
+      }
+    }
+  ],
+  "hasMore": false,
+  "filter" : {
+    "status-eq" : "ABORTED",
+    "limit" : 20
+  }
+}
+----
+
+====
+
+== Errors processing
+
+To make the convention complete we must to define <<def-Structure,Structure>> to describe _Errors_ from the server.
+There can be problems related to the client input (4xx error-codes) or server (5xx error-codes) but all of then must conform the next model:
+
+[source,json]
+----
+{
+  "status": <integer code>,
+  "error": "string error code",
+  "requestId": "string uuid"
+}
+----
+
+This model is enough for server error codes and can be extended by yourself
+
+.Response for the 503 error
+====
+[source,json]
+----
+{
+  "status": 503,
+  "error": "REMOTE_SERVER_UNAVAILABLE",
+  "requestId": "054a71e0-0cfd-11e9-ab14-d663bd873d93"
+}
+----
+====
+
+.Extended model for the 4xx errors
+====
+[source,json]
+----
+{
+  "status": 400,
+  "error": "BAD_REQUEST",
+  "requestId": "28f828da-0cfd-11e9-ab14-d663bd873d93",
+
+  "description": "Several constraint over the entity was violated",
+  "fields": {
+    "comment": {
+      "error": "CONTENT_IS_TOO_LONG",
+      "description": "Comment message is too long",
+    },
+    "title": {
+      "error": "CONTENT_IS_TOO_SHORT",
+      "description": "title must have at least 5 symbols",
+      "parameters": {
+        "minLength" : 5
+      }
+    }
+  }
+}
+----
+
+Or keep it as simple as possible
+
+[source,json]
+----
+{
+  "status": 409,
+  "error": "OPERATION_IS_ALREADY_ABORTED",
+  "requestId": "63de8a9c-0cfe-11e9-ab14-d663bd873d93"
+}
+----
+====
+
+[#best-practices]
+== Best Practices
+
+=== Nested structures to avoid duplication
+
+====
+[source,json]
+----
+{ //...
+  "homeAddress": {
+    "street": "Aviation",
+    "building": "1"
+  }
+}
+----
+instead of:
+
+[source,json]
+----
+{ //...
+  "homeAddressStreet": "Aviation",
+  "homeAddressBuilding": "1"
+}
+----
+====
+
+=== Implicit filters to reduce unnecessary server loads
+
+You can add default limit for <<def-Filtrator,Filtrator>> queries:
+
+====
+Request GET ``example.org/api/comments``
+
+Response:
+[source,json]
+----
+{
+  "items": [
+    {
+      "id": 42,
+      "threadId": 42,
+      "content": "42"
+    }
+  ],
+  "hasMore": false,
+  "filter" : {
+    "limit" : 20 // implicit filter should be always returned
+                 // with response to avoid confusion
+  }
+}
+----
+====
+
+=== Better than Pagination
+
+The concept of <<def-Filtrator,Filtrators>> is created to overcome drawbacks of classic _Pagination_.
+When you are using pagination you provide the limits (a page number and number of items on the page) and orders as filters.
+Such functionality is easy but can lead to duplication due to prepended entities or it can lead to expensive count queries to count total amount of pages.
+On hot database tables the consistent count queries are not easy tasks but the result often is not so important for users.
+Instead of this we suggest to use infinity scrolling or powerful filtration system (all counts can be counted on demand if they really needed)
+
+.Side by Side comparison
+====
+
+Pagination request GET `.../comments?page=0&limit=20`
+
+Response:
+[source,json]
+----
+{
+  "content": [{...},{...},...],
+  "page": 0,
+  "limit": 20,
+  "totalPages": 42
+}
+----
+
+Filtration request GET `.../comments?id-gte=0&limit=20`
+
+Response:
+[source,json]
+----
+{
+  "items": [{…},{…},…],
+  "hasMore": true,
+  "filter" : {
+    "id-gte": "0",
+    "limit" : 20
+  }
+}
+----
+====
+
+So as you can see for the first page changes are pretty simple.
+
+Suppose we have serial _Identities_ for our entities.
+To navigate to the following results use next queries
+
+.Side by Side navigation
+====
+
+Pagination request GET `.../comments?page=1&limit=20`
+
+Response:
+[source,json]
+----
+{
+  "content": [{...},{...},...],
+  "page": 1,
+  "limit": 20,
+  "totalPages": 42
+}
+----
+
+Filtration request GET `.../comments?id-gt=19&limit=20` // 19 is the Identity of the last item of previous response
+
+Response:
+[source,json]
+----
+{
+  "items": [{…},{…},…],
+  "hasMore": true,
+  "filter" : {
+    "id-gt": "19"
+    "limit" : 20,
+  }
+}
+----
+====
+
+But the real power appears when you want navigation by date, priority, name or whatever you <<def-Entity,Entity>> can held.
+With _Filtrators_ you are safe from pre- or appending new items regardless of sort order.
+
+=== Short-living operation for non-object transformations
+
+If you want to make non-object related change, let's say update amount of votes for the comment, you should use <<def-Operation,Operation>>.
+Such operations can be synchronous and provide final result as response.
+
+.Short-living operation to make a like
+====
+Suppose we have comment with 5 votes:
+[source,json]
+----
+{
+  "id": 42,
+  "threadId": 42,
+  "content": "popular comment",
+  "votes": 5
+}
+----
+
+Because comments can be voted simultaneously by many users we cannot _set_ new value.
+We use operation increment on this <<def-Entity,Entity>> which check constraints (like one __like__ from one user) and add 1 vote.
+Developers should decide what the __result__ payload of operation will be returned.
+In this case we decide return the current amount of votes.
+
+Request POST ``example.org/api/comments/-/upvote``
+
+Response:
+[source,json]
+----
+{
+  "id": "5725fb91-755e-44ca-877b-d633a128a492",
+  "status": "DONE",
+  "parameters": {},
+  "result": {
+    "votes": 7
+  }
+}
+----
+
+The values 7 in this case means some one upvoted comment during initial page load and voting for comment by us.
+====
+
+With time server can accumulate many such _Short-living_ operations so there can be deprecation policy to remove them.
+You should decide it depending on you requirements from immediately to never.
+
+// TODO: batch request as operation

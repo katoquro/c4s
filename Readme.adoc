@@ -1,0 +1,16 @@
+= Short developer guide
+
+== Building
+
+Run continuous building process
+
+```
+; ./gradlew asciidoctor -t
+```
+
+serve built page from the server
+
+```
+; cd ./build/asciidoc/html5
+; python3 -m http.server
+```
