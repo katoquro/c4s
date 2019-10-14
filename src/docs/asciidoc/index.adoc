@@ -1,4 +1,5 @@
-= c4s (beta) - common communication convention between client and server
+= **c4s**^β^ -- **C**ommon **C**ommunication **C**onvention between **C**lient and **S**erver
+[siˈfɔrs]
 :toc: left
 :toc-title: Table of Adventures
 :source-highlighter: coderay
