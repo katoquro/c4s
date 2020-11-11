@@ -11,6 +11,6 @@ Run continuous building process
 serve built page from the server
 
 ```
-; cd ./build/asciidoc/html5
+; cd ./build/docs/asciidoc
 ; python3 -m http.server
 ```
