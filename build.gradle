@@ -1,6 +1,6 @@
 plugins {
     // http://asciidoctor.org/docs/asciidoctor-gradle-plugin/
-    id "org.asciidoctor.jvm.convert" version "3.3.0"
+    id "org.asciidoctor.jvm.convert" version "3.3.2"
 }
 
 repositories {

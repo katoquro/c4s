@@ -4,13 +4,15 @@
 
 Run continuous building process
 
-```
+[source]
+----
 ; ./gradlew asciidoctor -t
-```
+----
 
 serve built page from the server
 
-```
+[source]
+----
 ; cd ./build/docs/asciidoc
 ; python3 -m http.server
-```
+----
