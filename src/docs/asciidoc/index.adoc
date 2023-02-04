@@ -6,7 +6,7 @@
 :toclevels: 3
 :imagesdir: /img
 
-Fork me on link:https://github.com/ainrif/c4s[GitHub]
+Fork me on link:https://github.com/katoquro/c4s[GitHub]
 
 == Motivation
 
@@ -48,30 +48,30 @@ Structure:: object without identity
 Entity:: object with identity field (e.g. ``id``)
 
 [[def-Model]]
-Model:: contract which describes which fields are in _Structure_ or _Model_
+Model:: contract which describes which fields are in _Structure_ or _Entity_
 
 [[def-View]]
 View:: read-only _Model_ which is used to represent _Entity_ from other point of view
 
 [[def-Filters]]
+// TODO: filters with 'in' or more complicated forms
 Filters:: a set of conditions to reduce response. +
           Filters are passed via GET request parameters: `<field>-<filter-keyword>=<value>`. +
-          _filter-keywords_ use keyword to express conditions: eq (`=`), gt (`>`), lg (`<`), gte(`>=`), lte (`<=`). +
+          _filter-keywords_ have next mapping to comparison operations:
+                eq (`=`), gt (`>`), lg (`<`), gte(`>=`), lte (`<=`). +
           _value_ must have the same tape with filtered field
-
-// TODO: filters with 'in' or more complicated forms
-
++
 .Filtering comments by dates
 ====
 GET request ``example.org/api/comments?createdAt-gte=2000-01-01&createdAt-lt=2000-01-10``
 ====
-
++
 There can be two additional steps: order and limit.
-It's assumed that limit is the last step.
-
-Sort is GET request parameters: `order=<field1-asc>[,<field2-desc>]`;
-Limit is GET request parameter: `limit=<count-of-results>`
-
+It's assumed that limit is evaluated always as the last step.
++
+_Order_ is GET request parameters: `order=<field1-asc>[,<field2-desc>]`; +
+_Limit_ is GET request parameter: `limit=<count-of-results>`
++
 .Filtering with order and limit
 ====
 GET request ``example.org/api/comments?createdAt-gte=2000-01-01&limit=1&order=createdAt-desc,id-asc``
@@ -79,8 +79,8 @@ GET request ``example.org/api/comments?createdAt-gte=2000-01-01&limit=1&order=cr
 
 [[def-Filtrator]]
 Filtrator:: a special _Model_ to filter and navigate across arrays.
-            Returned as a response when more than one entity was queried.
-
+            It's returned as a response when more than one entity was queried.
++
 .Response with Filtrator in a body
 ====
 [source,json]
@@ -94,16 +94,18 @@ Filtrator:: a special _Model_ to filter and navigate across arrays.
 }
 ----
 <1> found entities according to filter
-<2> filter used in request
+<2> filter used in request (including implicit)
 ====
 
 [[def-Counter]]
-Counter:: any field which represent an amount of items
+Counter:: any field which represent an amount of items. +
+          Also can be used as a _View_.
+          See <<example-Counter,Counter example>> for more details.
 
 [[def-Operation]]
-Operation:: a system level <<def-Entity,Entity>> to check long term processes or complex object transformations.
-            Returned as a response for operation requests. See link:#operations-oriented-part[Operations oriented part]
-
+Operation:: a system level <<def-Entity,Entity>> to track long term processes or complex object transformations.
+            It's returned as a response for operation requests. See link:#operations-oriented-part[Operations oriented part]
++
 .Operation model
 ====
 [source,json]
@@ -119,17 +121,16 @@ Operation:: a system level <<def-Entity,Entity>> to check long term processes or
   }
 }
 ----
-<1> any set of statuses agreed in your team
+<1> one of set of statuses agreed in your team
 <2> input operation parameters
 <3> the result of operation. May contain intermediate state.
 ====
 
 == Data & Transfer conventions
 
-
 - URI path must use *'kebab-case'*
 - URI path entries are used in plural form, e.g. /comment**s**/{id}
-- Field naming convention must be either *'snake_case'* or *'camelCase'* (but only one across application)
+- Field naming convention must be either *'snake_case'* or *'camelCase'* (but the same across the whole application)
 - <<def-Entity,Entity>> cannot contain another <<def-Entity,Entity>>, i.e. nesting isn't allowed
 - Arrays inside <<def-Entity,Entity>> can contain only _primitives_ (numbers, chars, strings) or structures
 - Date & time are always in link:https://en.wikipedia.org/wiki/Coordinated_Universal_Time[UTC]
@@ -138,8 +139,8 @@ Operation:: a system level <<def-Entity,Entity>> to check long term processes or
 [#object-related-part]
 == Object related part
 
-This part describes CRUD calls on the entity.
-All calls manipulate the same model across one entity (except <<def-View,Views>>)
+This part describes CRUD calls on Entities.
+All operations usw the same Entity model (except <<def-View,Views>>)
 
 === Entity addressing
 
@@ -156,6 +157,8 @@ Entity address cannot contain more than one identity, in other words nested addr
 right: /comments/{comment-id} +
 wrong: /posts/{post-id}/comments/{comment-id}
 ====
+
+=== Handling Entities
 
 C4S is using subset of link:https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods[HTTP verbs] to manipulate an <<def-Entity,Entity>>
 
@@ -304,7 +307,7 @@ Response:
 
 === Setup relations between Entities
 
-The documentation bellow operates with definitions like _first_ (was created 'before'), _second_ (was created 'after'), _one_ and _many_ which describes corresponding parts of relations types.
+The documentation bellow operates such definitions like _first_ (was created 'before'), _second_ (was created 'after'), _one_ and _many_ which describes corresponding parts of relation types.
 
 ==== One-to-One
 
@@ -335,8 +338,8 @@ Response:
 
 ====
 
-Additionally if bidirectional link is required (to filter the _first_ by identity of the _second_)
-this request must set the _second_ identity into the _first_ object
+NOTE: If bidirectional link is required (to filter the _first_ by identity of the _second_)
+it is allowed to set identity of the _second_ into the _first_ entity implicitly during the operation.
 
 ==== One-to-Many
 
@@ -367,19 +370,19 @@ Response:
 
 ====
 
-Additionally if bidirectional links are required the _one_ entity can contain an array of <<def-Identity, Identities>> of __many__s
+NOTE: If bidirectional links are required it is allowed to append identity of _many_ to the array in _one_ entity implicitly during the operation.
 
-You may see that contact for One-to-One and One-to-Many are the same.
+You may notice that process of connecting One-to-One and One-to-Many are quite similar.
 
 ==== Many-to-Many
 
 This type of relation is difficult to manage and filter.
-Try to avoid this case in resource model by hiding behind "One-to-Many" if really need to
+Try to avoid this case in resource model by hiding behind "One-to-Many" if really need to.
 
 == Views for Entities
 
 <<def-View,Views>> are useful for extending (with additional info) or reducing (to produce lightweight representation) Entities.
-View of Entity is called via `dot extension` in a path: `<entity-path>.<view>`
+View of an Entity may me requested with `dot extension` in a path, e.g. `<entity-path>.<view>`
 
 .Views
 ====
@@ -387,6 +390,7 @@ View of Entity is called via `dot extension` in a path: `<entity-path>.<view>`
 /comments.with-likes-count
 ====
 
+[[example-Counter]]
 View can be created for particular cases or be generic like `<entity>.count` which adds total amount to <<def-Filtrator,Filtrator>> response.
 <<def-Filters,Filters>> are also applicable to views like to entities.
 
@@ -414,18 +418,19 @@ Response:
 [#operations-oriented-part]
 == Operations oriented part
 
-This path describes operations on the entities.
+This path describes operations (or remote procedure calls) on the entities.
 
-<<def-Operation,Operations>> are designed for long term calls or transformations which cannot be done on entity like an object.
-All calls (except create) manipulate the Operation model.
+<<def-Operation, Operations>> are designed for long term calls or transformations which cannot be done on entity like an object.
+All calls (except create) use the Operation model.
+The creation uses form with input parameters which are individual for every operation.
 
 === Operation addressing
-Because entity path may have long prefix due to server routing implementation, operation URI part in a path it's separated from object part by token `/-/` (means: not an <<def-Identity,Identity>>)
+Because entity path may have long prefix (due to routeing rules), operation URI part in a path it's separated from object part by token `/-/` (means: not an <<def-Identity,Identity>>)
 
 .Operation path
 ====
-/api/entity/-/operation +
-/api/microservice/v42/entity/-/operation
+/prefix/entity/-/operation +
+/api/microservice/v42/entity/-/make-backup
 ====
 
 Operation URI path can contain only operation identity, and all parameters must be passed in a body.
@@ -435,6 +440,8 @@ Scheme of operation URI:
 
 /<any-server-prefix>/<entity>/-/<operation>/<operation-id>
 ====
+
+=== Handling Operations
 
 ==== Create
 
@@ -497,8 +504,6 @@ This request should return operation in current state.
 There are no guarantees about immediate aborting (or rollback) because it depends on the server implementation.
 This is a way just say to server that the result of its operations already doesn't matter for client.
 
-Note: You should consider having a deprecation policy for complete operations.
-
 .Sending of abort signal
 ====
 Request DELETE ``example.org/api/comments/-/archive/5725fb91-755e-44ca-877b-d633a128a492``
@@ -520,12 +525,14 @@ Response:
 ----
 ====
 
+NOTE: You should consider having a deprecation policy for complete operations and thair results.
+
 ==== Read list of operations
 
 GET request on operation path.
 Request may contain filters.
 
-.Getting an Filtrator of operations
+.Getting a Filtrator of operations
 ====
 
 Request GET ``example.org/api/comments/-/archive?status-eq=ABORTED``
@@ -557,10 +564,41 @@ Response:
 
 ====
 
+== Sync Views for Operations
+
+Having the same _Views_ for operations like for entities makes no sense.
+However clients may want to have a synchronous (blocking) request and got the result of operation w/o intermediate states.
+
+For this reason we have a special View for operations: `.sync`.
+It says to server that client wants to get the result of operation immediately.
+Of course, it's not always possible to do it (for example, if operation is long-term or asynchronous by nature),
+is such cases server must return error (see <<Errors processing>>).
+
+.Sync View for archiving operation when backend is ready to make it blocking
+====
+Request POST ``example.org/api/comments/-/archive.sync``
+[source,json]
+----
+{
+  "threadId": 42
+}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "archivedCommentIds" : [43, 44, 45]
+}
+----
+====
+
+
 == Errors processing
 
-To make the convention complete we must to define <<def-Structure,Structure>> to describe _Errors_ from the server.
-There can be problems related to the client input (4xx error-codes) or server (5xx error-codes) but all of then must conform the next model:
+To make the convention complete we must define <<def-Structure,Structure>> to describe _Errors_ from the server.
+There can be problems related to the client input (4xx error-codes) or server (5xx error-codes) but all of them must conform the next model:
 
 [source,json]
 ----
@@ -679,8 +717,11 @@ Response:
 === Better than Pagination
 
 The concept of <<def-Filtrator,Filtrators>> is created to overcome drawbacks of classic _Pagination_.
-When you are using pagination you provide the limits (a page number and number of items on the page) and orders as filters.
-Such functionality is easy but can lead to duplication due to prepended entities or it can lead to expensive count queries to count total amount of pages.
+When you are using pagination you provide the limits (a page number and number of items on the page)
+    and orders as filters.
+Such functionality is easy but can lead to duplication due to prepended entities,
+    so it can lead to expensive count queries to count total amount of pages.
+
 On hot database tables the consistent count queries are not easy tasks but the result often is not so important for users.
 Instead of this we suggest to use infinity scrolling or powerful filtration system (all counts can be counted on demand if they really needed)
 
@@ -737,7 +778,7 @@ Response:
 }
 ----
 
-Filtration request GET `.../comments?id-gt=19&limit=20` // 19 is the Identity of the last item of previous response
+Filtration request GET `.../comments?id-gt=42&limit=20` where 42 is the Identity of the last item of previous response
 
 Response:
 [source,json]
@@ -746,20 +787,20 @@ Response:
   "items": [{…},{…},…],
   "hasMore": true,
   "filter" : {
-    "id-gt": "19"
-    "limit" : 20,
+    "id-gt": "42",
+    "limit" : 20
   }
 }
 ----
 ====
 
-But the real power appears when you want navigation by date, priority, name or whatever you <<def-Entity,Entity>> can held.
-With _Filtrators_ you are safe from pre- or appending new items regardless of sort order.
+But the real power appears when you want navigation by date, priority, name or whatever you <<def-Entity,Entity>> can hold.
+With _Filtrators_ you are safe from pre- or appending new items regardless of order.
 
 === Short-living operation for non-object transformations
 
 If you want to make non-object related change, let's say update amount of votes for the comment, you should use <<def-Operation,Operation>>.
-Such operations can be synchronous and provide final result as response.
+Such operations can use Sync View and provide final result as response.
 
 .Short-living operation to make a like
 ====
@@ -779,7 +820,7 @@ We use operation increment on this <<def-Entity,Entity>> which check constraints
 Developers should decide what the __result__ payload of operation will be returned.
 In this case we decide return the current amount of votes.
 
-Request POST ``example.org/api/comments/-/upvote``
+Request POST ``example.org/api/comments/-/upvote.sync``
 
 Response:
 [source,json]
@@ -794,10 +835,9 @@ Response:
 }
 ----
 
-The values 7 in this case means some one upvoted comment during initial page load and voting for comment by us.
+The values 7 in this case means someone has upvoted comment between initial page load and voting for comment by us.
 ====
 
-With time server can accumulate many such _Short-living_ operations so there can be deprecation policy to remove them.
-You should decide it depending on you requirements from immediately to never.
+With time a database will accumulate many such _Short-living_ operations so there can be deprecation policy to remove them.
 
 // TODO: batch request as operation
